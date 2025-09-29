@@ -2,8 +2,26 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'settings_page.dart';
 import 'home_page.dart';
+import 'theme_controller.dart';
+import 'notifications_service.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await loadTheme();
+  // Initialize notifications and Firebase
+  await NotificationsService.instance.init();
+
+  // For debugging: print FCM token
+  try {
+    final token = await FirebaseMessaging.instance.getToken();
+    // ignore: avoid_print
+    print('FCM token: $token');
+  } catch (e) {
+    // ignore: avoid_print
+    print('Failed to get FCM token: $e');
+  }
+
   runApp(const MainApp());
 }
 
@@ -12,18 +30,41 @@ class MainApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        primaryColor: const Color(0xFF2563EB),
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2563EB)),
-      ),
-      routes: {
-        '/': (c) => const LoginPage(),
-        '/settings': (c) => const SettingsPage(),
-        '/home': (c) => const HomePage(),
+    return ValueListenableBuilder(
+      valueListenable: themeNotifier,
+      builder: (context, ThemeMode mode, _) {
+        return MaterialApp(
+          debugShowCheckedModeBanner: false,
+          theme: ThemeData(
+            brightness: Brightness.light,
+            primaryColor: const Color(0xFF2563EB),
+            colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2563EB)),
+          ),
+          darkTheme: ThemeData(
+            brightness: Brightness.dark,
+            primaryColor: const Color(0xFF8B0B0B),
+            scaffoldBackgroundColor: const Color(0xFF0B0B0B),
+            cardColor: const Color(0xFF121212),
+            dividerColor: Colors.grey.shade800,
+            appBarTheme: const AppBarTheme(backgroundColor: Colors.transparent, elevation: 0, iconTheme: IconThemeData(color: Colors.white)),
+            colorScheme: ColorScheme.dark(
+              primary: const Color(0xFF2563EB),
+              onPrimary: Colors.white,
+              secondary: const Color(0xFFED135C),
+              surface: const Color(0xFF121212),
+              onSurface: Colors.white70,
+            ),
+            elevatedButtonTheme: ElevatedButtonThemeData(style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2563EB))),
+          ),
+          themeMode: mode,
+          routes: {
+            '/': (c) => const LoginPage(),
+            '/settings': (c) => const SettingsPage(),
+            '/home': (c) => const HomePage(),
+          },
+          initialRoute: '/',
+        );
       },
-      initialRoute: '/',
     );
   }
 }
@@ -42,14 +83,15 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context).size;
-    const labelColor = Color(0xFF6B7280);
-    const hintColor = Color(0xFF9CA3AF);
-    const borderColor = Color(0xFFE5E7EB);
-    const actionBlue = Color(0xFF2563EB);
+    final theme = Theme.of(context);
+    final labelColor = theme.textTheme.bodyMedium?.color ?? const Color(0xFF6B7280);
+    final hintColor = theme.textTheme.bodySmall?.color ?? const Color(0xFF9CA3AF);
+    final borderColor = theme.dividerColor;
+    final actionBlue = theme.colorScheme.primary;
     final topSpacing = media.height * 0.08;
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
@@ -67,27 +109,20 @@ class _LoginPageState extends State<LoginPage> {
                       height: 44,
                     ),
                   ),
-                  Positioned(
-                    right: 0,
-                    child: IconButton(
-                      onPressed: () => Navigator.of(context).pushNamed('/settings'),
-                      icon: const Icon(Icons.settings_outlined),
-                    ),
-                  ),
                 ],
               ),
               const SizedBox(height: 32),
 
-              const Text('E-mail', style: TextStyle(fontWeight: FontWeight.w600, color: labelColor)),
+              Text('E-mail', style: TextStyle(fontWeight: FontWeight.w600, color: labelColor)),
               const SizedBox(height: 8),
               TextField(
                 decoration: InputDecoration(
                   hintText: 'Informe seu e-mail',
-                  hintStyle: const TextStyle(color: hintColor),
+                  hintStyle: TextStyle(color: hintColor),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-                  enabledBorder: OutlineInputBorder(
+                      enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: borderColor),
+                    borderSide: BorderSide(color: borderColor),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
@@ -98,17 +133,17 @@ class _LoginPageState extends State<LoginPage> {
               ),
 
               const SizedBox(height: 16),
-              const Text('Senha', style: TextStyle(fontWeight: FontWeight.w600, color: labelColor)),
+              Text('Senha', style: TextStyle(fontWeight: FontWeight.w600, color: labelColor)),
               const SizedBox(height: 8),
               TextField(
                 obscureText: _obscure,
                 decoration: InputDecoration(
                   hintText: 'Informe sua senha',
-                  hintStyle: const TextStyle(color: hintColor),
+                      hintStyle: TextStyle(color: hintColor),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-                  enabledBorder: OutlineInputBorder(
+                      enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: borderColor),
+                    borderSide: BorderSide(color: borderColor),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
@@ -139,8 +174,8 @@ class _LoginPageState extends State<LoginPage> {
                           : null,
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  const Text('Lembre-me', style: TextStyle(color: labelColor)),
+                      const SizedBox(width: 10),
+                      Text('Lembre-me', style: TextStyle(color: labelColor)),
                   const Spacer(),
                   TextButton(
                     onPressed: () {},

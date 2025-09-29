@@ -31,3 +31,4 @@ Projeto Flutter base criado automaticamente.
 
 - Este projeto foi criado com `flutter create` usando o template padrão.
 - Edite `lib/main.dart` para começar.
+# flutter-study
