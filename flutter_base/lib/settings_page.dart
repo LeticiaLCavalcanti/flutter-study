@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'theme_controller.dart';
+import 'api_service.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -133,9 +134,10 @@ class _SettingsPageState extends State<SettingsPage> {
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton(
-                  onPressed: () {
-                    // Navigate to login and clear navigation stack (logout)
-                    Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+                  onPressed: () async {
+                    final navigator = Navigator.of(context);
+                    await ApiService.clearToken();
+                    navigator.pushNamedAndRemoveUntil('/', (route) => false);
                   },
                   style: OutlinedButton.styleFrom(
                     side: BorderSide(color: actionBlue),

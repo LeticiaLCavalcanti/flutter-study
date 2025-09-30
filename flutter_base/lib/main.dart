@@ -5,6 +5,7 @@ import 'home_page.dart';
 import 'theme_controller.dart';
 import 'notifications_service.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'api_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -79,6 +80,9 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   bool _obscure = true;
   bool _remember = false;
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  bool _loading = false;
 
   @override
   Widget build(BuildContext context) {
@@ -129,6 +133,7 @@ class _LoginPageState extends State<LoginPage> {
                     borderSide: BorderSide(color: actionBlue, width: 1.5),
                   ),
                 ),
+                controller: _emailController,
                 keyboardType: TextInputType.emailAddress,
               ),
 
@@ -136,6 +141,7 @@ class _LoginPageState extends State<LoginPage> {
               Text('Senha', style: TextStyle(fontWeight: FontWeight.w600, color: labelColor)),
               const SizedBox(height: 8),
               TextField(
+                controller: _passwordController,
                 obscureText: _obscure,
                 decoration: InputDecoration(
                   hintText: 'Informe sua senha',
@@ -189,13 +195,34 @@ class _LoginPageState extends State<LoginPage> {
               SizedBox(
                 height: 52,
                 child: ElevatedButton(
-                  onPressed: () {},
+                  onPressed: () async {
+                    if (_loading) return;
+                    setState(() => _loading = true);
+                    final navigator = Navigator.of(context);
+                    final messenger = ScaffoldMessenger.of(context);
+                    final email = _emailController.text.trim();
+                    final password = _passwordController.text;
+                    final result = await ApiService.loginAluno(email, password);
+                    if (result.containsKey('token')) {
+                      final token = result['token'] as String;
+                      await ApiService.saveToken(token);
+                      final fcm = await FirebaseMessaging.instance.getToken();
+                      if (fcm != null) await ApiService.registerFcm(token, fcm);
+                      if (!mounted) return;
+                      navigator.pushReplacementNamed('/home');
+                    } else {
+                      if (!mounted) return;
+                      final err = result['error'] ?? 'Falha ao autenticar.';
+                      messenger.showSnackBar(SnackBar(content: Text(err.toString())));
+                    }
+                    setState(() => _loading = false);
+                  },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: actionBlue,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     elevation: 0,
                   ),
-                  child: const Text('Entrar', style: TextStyle(fontSize: 16, color: Colors.white)),
+                  child: _loading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Entrar', style: TextStyle(fontSize: 16, color: Colors.white)),
                 ),
               ),
 
