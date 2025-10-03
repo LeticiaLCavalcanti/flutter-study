@@ -3,12 +3,9 @@ import 'dart:io';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-// minimal imports, no material widgets required here
 
-// Background message handler must be a top-level function
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
-  // You can perform background work here.
 }
 
 class NotificationsService {
@@ -18,7 +15,13 @@ class NotificationsService {
   final FlutterLocalNotificationsPlugin _local = FlutterLocalNotificationsPlugin();
 
   Future<void> init() async {
-    await Firebase.initializeApp();
+    var firebaseAvailable = false;
+    try {
+      await Firebase.initializeApp();
+      firebaseAvailable = Firebase.apps.isNotEmpty;
+    } catch (_) {
+      firebaseAvailable = false;
+    }
 
     // Android initialization
     const AndroidInitializationSettings androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -32,25 +35,29 @@ class NotificationsService {
       // Handle tap
     });
 
-    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+    if (firebaseAvailable) {
+      try {
+        FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-    // Request permissions on iOS
-    if (Platform.isIOS) {
-      await FirebaseMessaging.instance.requestPermission();
-    }
+        // Request permissions on iOS
+        if (Platform.isIOS) {
+          await FirebaseMessaging.instance.requestPermission();
+        }
 
-    // Foreground message handler
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      final notification = message.notification;
-      if (notification != null) {
-        showLocalNotification(notification.title ?? '', notification.body ?? '');
+        // Foreground message handler
+        FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+          final notification = message.notification;
+          if (notification != null) {
+            showLocalNotification(notification.title ?? '', notification.body ?? '');
+          }
+        });
+
+        FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+        });
+      } catch (e) {
+        // Ignore any FirebaseMessaging errors in environments where Firebase isn't fully set up.
       }
-    });
-
-    // Optionally handle when a user taps a notification while the app is terminated or backgrounded
-    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      // Navigate to a specific page if needed. We'll leave this to the app.
-    });
+    }
   }
 
   Future<void> showLocalNotification(String title, String body) async {

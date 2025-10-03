@@ -5,23 +5,21 @@ import 'home_page.dart';
 import 'theme_controller.dart';
 import 'notifications_service.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'api_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await loadTheme();
-  // Initialize notifications and Firebase
-  await NotificationsService.instance.init();
 
-  // For debugging: print FCM token
   try {
-    final token = await FirebaseMessaging.instance.getToken();
+    await Firebase.initializeApp();
+  } catch (e, st) {
     // ignore: avoid_print
-    print('FCM token: $token');
-  } catch (e) {
-    // ignore: avoid_print
-    print('Failed to get FCM token: $e');
+    print('Warning: Firebase.initializeApp() failed: $e\n$st');
   }
+
+  await NotificationsService.instance.init();
 
   runApp(const MainApp());
 }
@@ -104,16 +102,12 @@ class _LoginPageState extends State<LoginPage> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               SizedBox(height: topSpacing),
-              Stack(
-                children: [
-                  Center(
-                    child: SvgPicture.asset(
-                      'assets/logo.svg',
-                      width: 160,
-                      height: 44,
-                    ),
-                  ),
-                ],
+              Center(
+                child: SvgPicture.asset(
+                  'assets/logo.svg',
+                  width: 160,
+                  height: 44,
+                ),
               ),
               const SizedBox(height: 32),
 
@@ -124,7 +118,7 @@ class _LoginPageState extends State<LoginPage> {
                   hintText: 'Informe seu e-mail',
                   hintStyle: TextStyle(color: hintColor),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-                      enabledBorder: OutlineInputBorder(
+                  enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                     borderSide: BorderSide(color: borderColor),
                   ),
@@ -145,9 +139,9 @@ class _LoginPageState extends State<LoginPage> {
                 obscureText: _obscure,
                 decoration: InputDecoration(
                   hintText: 'Informe sua senha',
-                      hintStyle: TextStyle(color: hintColor),
+                  hintStyle: TextStyle(color: hintColor),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-                      enabledBorder: OutlineInputBorder(
+                  enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                     borderSide: BorderSide(color: borderColor),
                   ),
@@ -175,18 +169,16 @@ class _LoginPageState extends State<LoginPage> {
                         border: Border.all(color: borderColor),
                         color: _remember ? actionBlue : Colors.transparent,
                       ),
-                      child: _remember
-                          ? const Icon(Icons.check, size: 14, color: Colors.white)
-                          : null,
+                      child: _remember ? const Icon(Icons.check, size: 14, color: Colors.white) : null,
                     ),
                   ),
-                      const SizedBox(width: 10),
-                      Text('Lembre-me', style: TextStyle(color: labelColor)),
+                  const SizedBox(width: 10),
+                  Text('Lembre-me', style: TextStyle(color: labelColor)),
                   const Spacer(),
                   TextButton(
                     onPressed: () {},
                     style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 0)),
-                    child: Text('Esqueceu a senha?', style: const TextStyle(decoration: TextDecoration.underline, color: Color(0xFF2563EB))),
+                    child: const Text('Esqueceu a senha?', style: TextStyle(decoration: TextDecoration.underline, color: Color(0xFF2563EB))),
                   ),
                 ],
               ),
@@ -202,27 +194,39 @@ class _LoginPageState extends State<LoginPage> {
                     final messenger = ScaffoldMessenger.of(context);
                     final email = _emailController.text.trim();
                     final password = _passwordController.text;
-                    final result = await ApiService.loginAluno(email, password);
-                    if (result.containsKey('token')) {
-                      final token = result['token'] as String;
-                      await ApiService.saveToken(token);
-                      final fcm = await FirebaseMessaging.instance.getToken();
-                      if (fcm != null) await ApiService.registerFcm(token, fcm);
+                    try {
+                      final result = await ApiService.loginAluno(email, password);
+                      if (result.containsKey('token')) {
+                        final token = result['token'] as String;
+                        await ApiService.saveToken(token);
+                        try {
+                          final fcm = await FirebaseMessaging.instance.getToken();
+                          if (fcm != null) await ApiService.registerFcm(token, fcm);
+                        } catch (e) {
+                          print('FCM token fetch/register failed: $e');
+                        }
+                        if (!mounted) return;
+                        navigator.pushReplacementNamed('/home');
+                      } else {
+                        if (!mounted) return;
+                        final err = result['error'] ?? 'Falha ao autenticar.';
+                        messenger.showSnackBar(SnackBar(content: Text(err.toString())));
+                      }
+                    } catch (e) {
                       if (!mounted) return;
-                      navigator.pushReplacementNamed('/home');
-                    } else {
-                      if (!mounted) return;
-                      final err = result['error'] ?? 'Falha ao autenticar.';
-                      messenger.showSnackBar(SnackBar(content: Text(err.toString())));
+                      messenger.showSnackBar(SnackBar(content: Text('Erro: ${e.toString()}')));
+                    } finally {
+                      if (mounted) setState(() => _loading = false);
                     }
-                    setState(() => _loading = false);
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: actionBlue,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     elevation: 0,
                   ),
-                  child: _loading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Entrar', style: TextStyle(fontSize: 16, color: Colors.white)),
+                  child: _loading
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Text('Entrar', style: TextStyle(fontSize: 16, color: Colors.white)),
                 ),
               ),
 

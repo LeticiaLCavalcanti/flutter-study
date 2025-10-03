@@ -8,24 +8,29 @@ class ApiService {
 
   static Future<Map<String, dynamic>> loginAluno(String email, String password) async {
     final url = Uri.parse('$baseUrl/auth/aluno/login');
-
-    final resp = await http.post(url,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'email': email, 'password': password}));
-
-    if (resp.statusCode == 200) {
-      final Map<String, dynamic> body = jsonDecode(resp.body);
-      final token = body['token'] as String?;
-      if (token != null) return {'token': token, 'body': body};
-      return {'error': 'Resposta inválida do servidor'};
-    }
-    
     try {
-      final Map<String, dynamic> body = jsonDecode(resp.body);
-      if (body.containsKey('message')) return {'error': body['message'].toString()};
-    } catch (_) {}
+      final resp = await http
+          .post(url, headers: {'Content-Type': 'application/json'}, body: jsonEncode({'email': email, 'password': password}))
+          .timeout(const Duration(seconds: 10));
 
-    return {'error': 'Erro ao autenticar (status ${resp.statusCode})'};
+      if (resp.statusCode == 200) {
+        final Map<String, dynamic> body = jsonDecode(resp.body);
+        final token = body['token'] as String?;
+        if (token != null) return {'token': token, 'body': body};
+        return {'error': 'Resposta inválida do servidor'};
+      }
+
+      try {
+        final Map<String, dynamic> body = jsonDecode(resp.body);
+        if (body.containsKey('message')) return {'error': body['message'].toString()};
+      } catch (_) {}
+
+      return {'error': 'Erro ao autenticar (status ${resp.statusCode})'};
+    } on http.ClientException catch (e) {
+      return {'error': 'Falha de rede: ${e.toString()}'};
+    } on Exception catch (e) {
+      return {'error': 'Erro de conexão: ${e.toString()}'};
+    }
   }
 
   static const _kJwtKey = 'jwt_token';
@@ -47,21 +52,28 @@ class ApiService {
 
   static Future<Map<String, dynamic>?> meAluno(String token) async {
     final url = Uri.parse('$baseUrl/auth/aluno/me');
-    final resp = await http.get(url, headers: {'Authorization': 'Bearer $token'});
-    if (resp.statusCode == 200) return jsonDecode(resp.body) as Map<String, dynamic>;
+    try {
+      final resp = await http.get(url, headers: {'Authorization': 'Bearer $token'}).timeout(const Duration(seconds: 10));
+      if (resp.statusCode == 200) return jsonDecode(resp.body) as Map<String, dynamic>;
+    } catch (_) {}
     return null;
   }
 
   static Future<bool> registerFcm(String? tokenJwt, String fcmToken) async {
     final token = tokenJwt ?? await readToken();
     final url = Uri.parse('$baseUrl/push/register');
-    final resp = await http.post(url,
-      headers: {
-        'Content-Type': 'application/json',
-        if (token != null) 'Authorization': 'Bearer $token',
-      },
-      body: jsonEncode({'hashPush': fcmToken}),
-    );
-    return resp.statusCode == 200 || resp.statusCode == 201;
+    try {
+      final resp = await http
+          .post(url,
+              headers: {
+                'Content-Type': 'application/json',
+                if (token != null) 'Authorization': 'Bearer $token',
+              },
+              body: jsonEncode({'hashPush': fcmToken}))
+          .timeout(const Duration(seconds: 10));
+      return resp.statusCode == 200 || resp.statusCode == 201;
+    } catch (_) {
+      return false;
+    }
   }
 }
