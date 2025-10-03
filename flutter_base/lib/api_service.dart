@@ -59,6 +59,12 @@ class ApiService {
     return null;
   }
 
+  static Future<Map<String, dynamic>?> getMe() async {
+    final token = await readToken();
+    if (token == null) return null;
+    return meAluno(token);
+  }
+
   static Future<bool> registerFcm(String? tokenJwt, String fcmToken) async {
     final token = tokenJwt ?? await readToken();
     final url = Uri.parse('$baseUrl/push/register');
@@ -75,5 +81,61 @@ class ApiService {
     } catch (_) {
       return false;
     }
+  }
+
+  static Future<Map<String, dynamic>> getPushList() async {
+    final token = await readToken();
+    if (token == null) return {'error': 'Token não encontrado'};
+
+    final url = Uri.parse('$baseUrl/push');
+    try {
+      final resp = await http.get(url, headers: {'Authorization': 'Bearer $token'}).timeout(const Duration(seconds: 10));
+      if (resp.statusCode == 200) {
+        final decoded = jsonDecode(resp.body);
+        return {'data': decoded};
+      }
+
+      try {
+        final Map<String, dynamic> body = jsonDecode(resp.body);
+        if (body.containsKey('message')) return {'error': body['message'].toString()};
+      } catch (_) {}
+
+      return {'error': 'Falha ao buscar notificações (status ${resp.statusCode})'};
+    } on http.ClientException catch (e) {
+      return {'error': 'Falha de rede: ${e.toString()}'};
+    } on Exception catch (e) {
+      return {'error': 'Erro de conexão: ${e.toString()}'};
+    }
+  }
+
+  static Future<bool> markPushAsRead(int idPushToSend) async {
+    final token = await readToken();
+    if (token == null) return false;
+
+    final endpoints = [
+      Uri.parse('$baseUrl/push/mark-read/$idPushToSend'),
+      Uri.parse('$baseUrl/push_to_send/$idPushToSend/mark-read'),
+      Uri.parse('$baseUrl/push_to_send/$idPushToSend'),
+    ];
+
+    for (final url in endpoints) {
+      try {
+        final resp = await http.post(url, headers: {'Authorization': 'Bearer $token'}).timeout(const Duration(seconds: 10));
+        if (resp.statusCode == 200 || resp.statusCode == 204) return true;
+       
+        if (resp.statusCode == 404) continue;
+      } catch (_) {
+  
+      }
+      try {
+        final resp = await http.patch(url,
+                headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+                body: jsonEncode({'enviado': true}))
+            .timeout(const Duration(seconds: 10));
+        if (resp.statusCode == 200 || resp.statusCode == 204) return true;
+      } catch (_) {}
+    }
+
+    return false;
   }
 }
